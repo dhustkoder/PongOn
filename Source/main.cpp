@@ -4,9 +4,9 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
 
-constexpr const int WIN_WIDTH {512};
-constexpr const int WIN_HEIGHT {256};
-constexpr const int CONNECTION_PORT {7171};
+constexpr const unsigned int WIN_WIDTH {512};
+constexpr const unsigned int WIN_HEIGHT {256};
+constexpr const unsigned short CONNECTION_PORT {7171};
 
 struct Position {
 	float top, bottom, left, right;
@@ -14,7 +14,7 @@ struct Position {
 
 struct Ball : sf::CircleShape {
 	static constexpr const float RADIUS {10.5};
-	static constexpr const float VELOCITY {7.5};
+	static constexpr const float VELOCITY {7.5f};
 	Ball() : sf::CircleShape(RADIUS) {
 		setPosition(WIN_WIDTH / 2, WIN_HEIGHT / 2);
 		setOrigin(RADIUS, RADIUS);
@@ -24,7 +24,7 @@ struct Ball : sf::CircleShape {
 struct Paddle : sf::RectangleShape {
 	static constexpr const float WIDTH {15};
 	static constexpr const float HEIGHT {60};
-	static constexpr const float VELOCITY {8.8};
+	static constexpr const float VELOCITY {8.8f};
 	Paddle(sf::Vector2f pos) : sf::RectangleShape({WIDTH, HEIGHT}) {
 		setPosition(pos);
 		setOrigin(WIDTH / 2, HEIGHT / 2);
@@ -148,17 +148,19 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		&& (ballPos.bottom >= paddle.top && ballPos.top <= paddle.bottom);
 	};
 	
-	if (collided(positions.player) || collided(positions.cpu))
+	if (collided(positions.player) || collided(positions.cpu)) {
 		ballVel.x = -ballVel.x;
-	else if (ballPos.left < 0)
-		ballVel.x = abs(ballVel.x);
-	else if (ballPos.right > WIN_WIDTH)
-		ballVel.x = -abs(ballVel.x);
-	
-	if (ballPos.top < 0)
-		ballVel.y = abs(ballVel.y);
-	else if (ballPos.bottom > WIN_HEIGHT)
-		ballVel.y = -abs(ballVel.y);
+	} else {
+		if (ballPos.left < 0)
+			ballVel.x = abs(ballVel.x);
+		else if (ballPos.right > WIN_WIDTH)
+			ballVel.x = -abs(ballVel.x);
+
+		if (ballPos.top < 0)
+			ballVel.y = abs(ballVel.y);
+		else if (ballPos.bottom > WIN_HEIGHT)
+			ballVel.y = -abs(ballVel.y);
+	}
 		
 	const auto check_vel = [](const Position& pos, float& vel) {
 		if (!vel)
@@ -173,7 +175,6 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		if (tcp_socket.send(&vel, sizeof(vel)) != sf::Socket::Done)
 		    std::cerr << "failed to send data!\n";
 	};
-	
 	const auto receive_vel = [](float& vel) {
 		std::size_t dummy;
 		if (tcp_socket.receive(&vel, sizeof(vel), dummy) != sf::Socket::Done)

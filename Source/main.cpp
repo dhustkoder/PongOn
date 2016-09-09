@@ -64,9 +64,8 @@ struct Connection {
 	static bool BootAsServer();
 	static bool BootAsClient();
 	static void AskNicks();
-	static bool SwitchNicks();
-	static void SendVel(float vel);
-	static void ReceiveVel(float* vel);
+	static bool ExchangeNicks();
+	static void ExchangeVelocities(Velocities* velocities);
 };
 
 sf::TcpSocket Connection::socket;
@@ -91,6 +90,9 @@ int main(int argc, char** argv)
 		} else if (std::strcmp(argv[1], "-client") == 0) {
 			if(!Connection::BootAsClient())
 				return EXIT_FAILURE;
+		} else {
+			std::cerr << "unknown argument: " << argv[1] << '\n';
+			return EXIT_FAILURE;
 		}
 	} else {
 		std::cerr << "usage: " << argv[0] << " <mode>\n"
@@ -191,26 +193,16 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 			ballVel.y = -abs(ballVel.y);
 	}
 		
-	const auto check_vel = [](const Position& pos, float& vel) {
-		if (!vel)
-			return;
-		else if (vel < 0 && pos.top <= 0)
+	if (velocities->local) {
+		const auto& pos = positions.local;
+		auto& vel = velocities->local;
+		if (vel < 0 && pos.top <= 0)
 			vel = 0;
 		else if (vel > 0 && pos.bottom >= WIN_HEIGHT)
 			vel = 0;
-	};
-	
-	const auto& local_pos = positions.local;
-	auto& local_vel = velocities->local;
-	check_vel(local_pos, local_vel);
-
-	if (Connection::is_server) {
-		Connection::SendVel(local_vel);
-		Connection::ReceiveVel(&velocities->remote);
-	} else {
-		Connection::ReceiveVel(&velocities->remote);
-		Connection::SendVel(local_vel);
 	}
+
+	Connection::ExchangeVelocities(velocities);
 }
 
 
@@ -265,7 +257,7 @@ bool Connection::BootAsServer()
 		return false;
 	}
 
-	return SwitchNicks();
+	return ExchangeNicks();
 }
 
 bool Connection::BootAsClient()
@@ -282,17 +274,18 @@ bool Connection::BootAsClient()
 		return false;
 	}
 
-	return SwitchNicks();
+	return ExchangeNicks();
 }
 
 void Connection::AskNicks()
 {
-	std::cout << "enter your nickname: ";
-	std::getline(std::cin, Connection::local_nick);
+	do {
+		std::cout << "enter your nickname: ";
+		std::getline(std::cin, local_nick);
+	} while (local_nick.size() == 0);
 }
 
-
-bool Connection::SwitchNicks()
+bool Connection::ExchangeNicks()
 {
 	const auto send = [] {
 		const auto local_nick_size = local_nick.size();
@@ -338,14 +331,22 @@ bool Connection::SwitchNicks()
 	return true;
 }
 
+void Connection::ExchangeVelocities(Velocities* const velocities)
+{
+	const auto send = [](float vel) {
+		if (socket.send(&vel, sizeof(vel)) != sf::Socket::Done)
+			std::cerr << "failed to send data!\n";
+	};
+	const auto receive = [](float& vel) {
+		if (socket.receive(&vel, sizeof(vel), bytes_received) != sf::Socket::Done)
+			std::cerr << "failed to receive data!\n";
+	};
 
-void Connection::SendVel(const float vel) {
-	if (socket.send(&vel, sizeof(vel)) != sf::Socket::Done)
-		std::cerr << "failed to send data!\n";
-}
-
-
-void Connection::ReceiveVel(float* const vel) {
-	if (socket.receive(vel, sizeof(*vel), bytes_received) != sf::Socket::Done)
-		std::cerr << "failed to receive data!\n";
+	if (is_server) {
+		send(velocities->local);
+		receive(velocities->remote);
+	} else {
+		receive(velocities->remote);
+		send(velocities->local);
+	}
 }

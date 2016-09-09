@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 	Shapes shapes;
 	Positions positions;
 	Velocities velocities;
-	sf::RenderWindow window({WIN_WIDTH, WIN_HEIGHT}, "PongCpp");
+	sf::RenderWindow window({WIN_WIDTH, WIN_HEIGHT}, "PongOn");
 	sf::Event event;
 
 	window.setFramerateLimit(60);

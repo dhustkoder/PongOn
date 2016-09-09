@@ -9,7 +9,6 @@
 constexpr const unsigned int WIN_WIDTH {512};
 constexpr const unsigned int WIN_HEIGHT {256};
 
-
 struct Position {
 	float top, bottom, left, right;
 };
@@ -29,8 +28,7 @@ struct Paddle : sf::RectangleShape {
 	static constexpr const float WIDTH {15.f};
 	static constexpr const float HEIGHT {60.f};
 	static constexpr const float VELOCITY {8.8f};
-	Paddle(sf::Vector2f pos) : sf::RectangleShape({WIDTH, HEIGHT}) {
-		setPosition(pos);
+	Paddle() : sf::RectangleShape({ WIDTH, HEIGHT }) {
 		setOrigin(WIDTH / 2, HEIGHT / 2);
 		setFillColor(sf::Color::Red);
 		setOutlineColor(sf::Color::Green);
@@ -39,20 +37,20 @@ struct Paddle : sf::RectangleShape {
 
 struct Shapes {
 	Ball ball;
-	Paddle player {{Paddle::WIDTH, WIN_HEIGHT / 2}};
-	Paddle cpu {{WIN_WIDTH - Paddle::WIDTH, WIN_HEIGHT / 2}};
+	Paddle local;
+	Paddle remote;
 };
 
 struct Velocities {
 	sf::Vector2f ball {Ball::VELOCITY, Ball::VELOCITY / 4};
-	float player {0.f};
-	float cpu {0.f};
+	float local {0.f};
+	float remote {0.f};
 };
 
 struct Positions {
 	Position ball;
-	Position player;
-	Position cpu;
+	Position local;
+	Position remote;
 };
 
 struct Connection {
@@ -105,9 +103,16 @@ int main(int argc, char** argv)
 	Velocities velocities;
 	sf::RenderWindow window({WIN_WIDTH, WIN_HEIGHT}, "PongCpp");
 	sf::Event event;
-	
+
 	window.setFramerateLimit(60);
-	
+	if (Connection::is_server) {
+		shapes.local.setPosition({Paddle::WIDTH/2, WIN_HEIGHT/2});
+		shapes.remote.setPosition({WIN_WIDTH - Paddle::WIDTH/2, WIN_HEIGHT/2});
+	} else {
+		shapes.local.setPosition({WIN_WIDTH - Paddle::WIDTH/2, WIN_HEIGHT/2});
+		shapes.remote.setPosition({Paddle::WIDTH/2, WIN_HEIGHT/2});
+	}
+
 	while (window.isOpen()) {
 		while (window.pollEvent(event)) {
 			switch (event.type) {
@@ -131,8 +136,8 @@ int main(int argc, char** argv)
 		
 		window.clear(sf::Color::Blue);
 		window.draw(shapes.ball);
-		window.draw(shapes.player);
-		window.draw(shapes.cpu);
+		window.draw(shapes.local);
+		window.draw(shapes.remote);
 		window.display();
 	}
 
@@ -154,10 +159,9 @@ void update_positions(const Shapes& shapes, Positions* const positions)
 		pos.bottom = shapePos.y + height_diff;
 		pos.top = shapePos.y - height_diff;
 	};
-	
 	update(shapes.ball, positions->ball, Ball::RADIUS, Ball::RADIUS);
-	update(shapes.player, positions->player, Paddle::WIDTH, Paddle::HEIGHT);
-	update(shapes.cpu, positions->cpu, Paddle::WIDTH, Paddle::HEIGHT);
+	update(shapes.local, positions->local, Paddle::WIDTH, Paddle::HEIGHT);
+	update(shapes.remote, positions->remote, Paddle::WIDTH, Paddle::HEIGHT);
 }
 
 
@@ -173,7 +177,7 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		&& (ballPos.bottom >= paddle.top && ballPos.top <= paddle.bottom);
 	};
 	
-	if (collided(positions.player) || collided(positions.cpu)) {
+	if (collided(positions.local) || collided(positions.remote)) {
 		ballVel.x = -ballVel.x;
 	} else {
 		if (ballPos.left < 0)
@@ -196,17 +200,15 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 			vel = 0;
 	};
 	
+	const auto& local_pos = positions.local;
+	auto& local_vel = velocities->local;
+	check_vel(local_pos, local_vel);
+
 	if (Connection::is_server) {
-		const auto& local_pos = positions.player;
-		auto& local_vel = velocities->player;
-		check_vel(local_pos, local_vel);
 		Connection::SendVel(local_vel);
-		Connection::ReceiveVel(&velocities->cpu);
+		Connection::ReceiveVel(&velocities->remote);
 	} else {
-		const auto& local_pos = positions.cpu;
-		auto& local_vel = velocities->cpu;
-		check_vel(local_pos, local_vel);
-		Connection::ReceiveVel(&velocities->player);
+		Connection::ReceiveVel(&velocities->remote);
 		Connection::SendVel(local_vel);
 	}
 }
@@ -217,21 +219,21 @@ void update_shapes(const Velocities& velocities, Shapes* const shapes)
 	if (velocities.ball != sf::Vector2f{0, 0})
 		shapes->ball.setPosition(shapes->ball.getPosition() + velocities.ball);
 	
-	if (velocities.player) {
-		const auto& pos = shapes->player.getPosition();
-		shapes->player.setPosition(pos.x, pos.y + velocities.player);
+	if (velocities.local) {
+		const auto& pos = shapes->local.getPosition();
+		shapes->local.setPosition(pos.x, pos.y + velocities.local);
 	}
 	
-	if (velocities.cpu) {
-		const auto& pos = shapes->cpu.getPosition();
-		shapes->cpu.setPosition(pos.x, pos.y + velocities.cpu);
+	if (velocities.remote) {
+		const auto& pos = shapes->remote.getPosition();
+		shapes->remote.setPosition(pos.x, pos.y + velocities.remote);
 	}
 }
 
 
 void process_input(const sf::Keyboard::Key code, const bool pressed, Velocities* const velocities)
 {
-	float& vel = Connection::is_server ? velocities->player : velocities->cpu;
+	float& vel = velocities->local;
 	if (pressed) {
 		switch (code) {
 		case sf::Keyboard::W: vel = -Paddle::VELOCITY; break;
@@ -286,7 +288,7 @@ bool Connection::BootAsClient()
 void Connection::AskNicks()
 {
 	std::cout << "enter your nickname: ";
-	std::cin >> Connection::local_nick;
+	std::getline(std::cin, Connection::local_nick);
 }
 
 

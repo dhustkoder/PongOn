@@ -65,7 +65,7 @@ struct Connection {
 	static bool BootAsClient();
 	static void AskNicks();
 	static bool ExchangeNicks();
-	static void ExchangeVelocities(Velocities* velocities);
+	static void ExchangeVelocities(float local, float* remote);
 };
 
 sf::TcpSocket Connection::socket;
@@ -202,7 +202,7 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 			vel = 0;
 	}
 
-	Connection::ExchangeVelocities(velocities);
+	Connection::ExchangeVelocities(velocities->local, &velocities->remote);
 }
 
 
@@ -288,12 +288,12 @@ void Connection::AskNicks()
 bool Connection::ExchangeNicks()
 {
 	const auto send = [] {
-		const auto local_nick_size = local_nick.size();
-		if (socket.send(&local_nick_size, sizeof(local_nick_size)) != sf::Socket::Done) {
+		const auto str_size = local_nick.size();
+		if (socket.send(&str_size, sizeof(str_size)) != sf::Socket::Done) {
 			std::cerr << "failed to send local nick size\n";
 			return false;
 		}
-		const auto nbytes = sizeof(local_nick[0]) * local_nick_size;
+		const auto nbytes = sizeof(local_nick[0]) * str_size;
 		if (socket.send(&local_nick[0], nbytes) != sf::Socket::Done) {
 			std::cerr << "failed to send local nick\n";
 			return false;
@@ -303,14 +303,14 @@ bool Connection::ExchangeNicks()
 	};
 	const auto receive = [] {
 		std::size_t dummy;
-		std::string::size_type remote_nick_size;
-		if (socket.receive(&remote_nick_size, sizeof(remote_nick_size), dummy)) {
+		std::string::size_type str_size;
+		if (socket.receive(&str_size, sizeof(str_size), dummy) != sf::Socket::Done) {
 			std::cerr << "failed to receive remote nick size\n";
 			return false;
 		}
 
-		remote_nick.resize(remote_nick_size);
-		const auto nbytes = sizeof(local_nick[0]) * remote_nick_size;
+		remote_nick.resize(str_size);
+		const auto nbytes = sizeof(local_nick[0]) * str_size;
 		if (socket.receive(&remote_nick[0], nbytes, dummy) != sf::Socket::Done) {
 			std::cerr << "failed to receive remote nick\n";
 			return false;
@@ -331,22 +331,22 @@ bool Connection::ExchangeNicks()
 	return true;
 }
 
-void Connection::ExchangeVelocities(Velocities* const velocities)
+void Connection::ExchangeVelocities(const float local, float* const remote)
 {
-	const auto send = [](float vel) {
-		if (socket.send(&vel, sizeof(vel)) != sf::Socket::Done)
+	const auto send = [=] {
+		if (socket.send(&local, sizeof(local)) != sf::Socket::Done)
 			std::cerr << "failed to send data!\n";
 	};
-	const auto receive = [](float& vel) {
-		if (socket.receive(&vel, sizeof(vel), bytes_received) != sf::Socket::Done)
+	const auto receive = [=] {
+		if (socket.receive(remote, sizeof(*remote), bytes_received) != sf::Socket::Done)
 			std::cerr << "failed to receive data!\n";
 	};
-
+	
 	if (is_server) {
-		send(velocities->local);
-		receive(velocities->remote);
+		send();
+		receive();
 	} else {
-		receive(velocities->remote);
-		send(velocities->local);
+		receive();
+		send();
 	}
 }

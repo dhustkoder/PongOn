@@ -54,17 +54,19 @@ struct Positions {
 };
 
 struct Connection {
-	static constexpr const unsigned short CONNECTION_PORT {7171};
+	enum class Mode {SERVER, CLIENT};
+	static constexpr const unsigned short PORT {7171};
 	static sf::TcpSocket socket;
 	static std::string local_nick;
 	static std::string remote_nick;
 	static std::size_t bytes_received;
+	static sf::Socket::Status status;
 	static bool is_server;
 
-	static bool BootAsServer();
-	static bool BootAsClient();
-	static void AskNicks();
+	static bool Init(Mode mode);
 	static bool ExchangeNicks();
+	static bool Send(const void* data, std::size_t size);
+	static bool Receive(void* buffer, std::size_t size);
 	static void ExchangeVelocities(float local, float* remote);
 };
 
@@ -72,6 +74,7 @@ sf::TcpSocket Connection::socket;
 std::string Connection::local_nick;
 std::string Connection::remote_nick;
 std::size_t Connection::bytes_received{0};
+sf::Socket::Status Connection::status{sf::Socket::Done};
 bool Connection::is_server{false};
 
 
@@ -85,10 +88,10 @@ int main(int argc, char** argv)
 {
 	if (argc > 1) {
 		if (std::strcmp(argv[1], "-server") == 0) {
-			if(!Connection::BootAsServer())
+			if(!Connection::Init(Connection::Mode::SERVER))
 				return EXIT_FAILURE;
 		} else if (std::strcmp(argv[1], "-client") == 0) {
-			if(!Connection::BootAsClient())
+			if(!Connection::Init(Connection::Mode::CLIENT))
 				return EXIT_FAILURE;
 		} else {
 			std::cerr << "unknown argument: " << argv[1] << '\n';
@@ -205,7 +208,6 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 	Connection::ExchangeVelocities(velocities->local, &velocities->remote);
 }
 
-
 void update_shapes(const Velocities& velocities, Shapes* const shapes)
 {
 	if (velocities.ball != sf::Vector2f{0, 0})
@@ -238,92 +240,78 @@ void process_input(const sf::Keyboard::Key code, const bool pressed, Velocities*
 }
 
 
-
-bool Connection::BootAsServer()
+bool Connection::Init(const Mode mode)
 {
-	sf::TcpListener listener;
-	is_server = true;
-	AskNicks();
+	is_server = mode == Mode::SERVER;
 
-	std::cout << "booting as server...\n";
-	if (listener.listen(CONNECTION_PORT) != sf::Socket::Done) {
-		std::cerr << "failed to listen port " << CONNECTION_PORT << '\n';
-		return false;
-	}
-	
-	std::cout << "waiting for client...\n"; 
-	if (listener.accept(socket) != sf::Socket::Done) {
-		std::cerr << "connection failed\n";
-		return false;
-	}
-
-	return ExchangeNicks();
-}
-
-bool Connection::BootAsClient()
-{
-	sf::IpAddress serverIp;
-	AskNicks();
-
-	std::cout << "booting as client...\n";
-	std::cout << "enter the server\'s ip address: ";
-	std::cin >> serverIp;
-	
-	if (socket.connect(serverIp, CONNECTION_PORT) != sf::Socket::Done) {
-		std::cerr << "connection failed!\n";
-		return false;
-	}
-
-	return ExchangeNicks();
-}
-
-void Connection::AskNicks()
-{
 	do {
 		std::cout << "enter your nickname: ";
 		std::getline(std::cin, local_nick);
 	} while (local_nick.size() == 0);
+
+	if (is_server) {
+		sf::TcpListener listener;
+		
+		std::cout << "booting as server...\n";
+		if (listener.listen(PORT) != sf::Socket::Done) {
+			std::cerr << "failed to listen port " << PORT << '\n';
+			return false;
+		}
+		
+		std::cout << "waiting for client...\n"; 
+		if (listener.accept(socket) != sf::Socket::Done) {
+			std::cerr << "connection failed\n";
+			return false;
+		}
+
+	} else {
+		sf::IpAddress serverIp;
+		std::cout << "booting as client...\n";
+		std::cout << "enter the server\'s ip address: ";
+		std::cin >> serverIp;
+		if (socket.connect(serverIp, PORT) != sf::Socket::Done) {
+			std::cerr << "connection failed!\n";
+			return false;
+		}
+	}
+
+	return ExchangeNicks();
 }
+
 
 bool Connection::ExchangeNicks()
 {
-	const auto send = [] {
+	const auto send_nick = [] {
 		const auto str_size = local_nick.size();
-		if (socket.send(&str_size, sizeof(str_size)) != sf::Socket::Done) {
+		if (!Send(&str_size, sizeof(str_size))) {
 			std::cerr << "failed to send local nick size\n";
 			return false;
 		}
-		const auto nbytes = sizeof(local_nick[0]) * str_size;
-		if (socket.send(&local_nick[0], nbytes) != sf::Socket::Done) {
+		if (!Send(&local_nick, sizeof(local_nick[0]) * str_size)) {
 			std::cerr << "failed to send local nick\n";
 			return false;
 		}
-
 		return true;
 	};
-	const auto receive = [] {
-		std::size_t dummy;
+	const auto receive_nick = [] {
 		std::string::size_type str_size;
-		if (socket.receive(&str_size, sizeof(str_size), dummy) != sf::Socket::Done) {
+		if (!Receive(&str_size, sizeof(str_size))) {
 			std::cerr << "failed to receive remote nick size\n";
 			return false;
 		}
-
 		remote_nick.resize(str_size);
-		const auto nbytes = sizeof(local_nick[0]) * str_size;
-		if (socket.receive(&remote_nick[0], nbytes, dummy) != sf::Socket::Done) {
+		if (!Receive(&remote_nick[0], sizeof(local_nick[0]) * str_size)) {
 			std::cerr << "failed to receive remote nick\n";
 			return false;
 		}
-
 		return true;
 	};
 
 	if (is_server) {
-		if (!send() || !receive())
+		if (!send_nick() || !receive_nick())
 			return false;
 	} else {
-		if (!receive() || !send())
+		if (!receive_nick() || !send_nick())
 			return false;
 	}
 
@@ -333,20 +321,23 @@ bool Connection::ExchangeNicks()
 
 void Connection::ExchangeVelocities(const float local, float* const remote)
 {
-	const auto send = [=] {
-		if (socket.send(&local, sizeof(local)) != sf::Socket::Done)
-			std::cerr << "failed to send data!\n";
-	};
-	const auto receive = [=] {
-		if (socket.receive(remote, sizeof(*remote), bytes_received) != sf::Socket::Done)
-			std::cerr << "failed to receive data!\n";
-	};
-	
 	if (is_server) {
-		send();
-		receive();
+		Send(&local, sizeof(local));
+		Receive(remote, sizeof(*remote));
 	} else {
-		receive();
-		send();
+		Receive(remote, sizeof(*remote));
+		Send(&local, sizeof(local));
 	}
+}
+
+bool Connection::Send(const void* const data, const std::size_t size)
+{
+	status = socket.send(data, size);
+	return status == sf::Socket::Done;
+}
+
+bool Connection::Receive(void* const buffer, const std::size_t size)
+{
+	status = socket.receive(buffer, size, bytes_received);
+	return status == sf::Socket::Done;
 }

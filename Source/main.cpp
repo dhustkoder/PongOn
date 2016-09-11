@@ -71,7 +71,13 @@ namespace Connection {
 	static bool ExchangeNicks();
 	static bool Send(const void* data, std::size_t size);
 	static bool Receive(void* buffer, std::size_t size);
-	static void ExchangeVelocities(float local, float* remote);
+	template<class Data>
+	static bool Exchange(Data sending, Data* receiving);
+	template<class SendData, class ReceiveData>
+	bool Exchange(const SendData* sending, std::size_t send_size, 
+	              ReceiveData* receiving, std::size_t receive_size);
+	template<class SendFunc, class ReceiveFunc>
+	static bool ExchangeFun(SendFunc send, ReceiveFunc receive);
 }
 
 static void update_positions(const Shapes& shapes, Positions* positions);
@@ -105,7 +111,6 @@ int main(int argc, char** argv)
 	sf::RenderWindow window({WinWidth, WinHeight}, "PongOn");
 	sf::Event event;
 
-	window.setFramerateLimit(60);
 	if (Connection::is_server) {
 		shapes.local.setPosition({Paddle::Width/2, WinHeight/2});
 		shapes.remote.setPosition({WinWidth - Paddle::Width/2, WinHeight/2});
@@ -114,6 +119,7 @@ int main(int argc, char** argv)
 		shapes.remote.setPosition({Paddle::Width/2, WinHeight/2});
 	}
 
+	window.setFramerateLimit(60);
 	while (window.isOpen()) {
 		while (window.pollEvent(event)) {
 			switch (event.type) {
@@ -201,7 +207,7 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 			vel = 0;
 	}
 
-	Connection::ExchangeVelocities(velocities->local, &velocities->remote);
+	Connection::Exchange(velocities->local, &velocities->remote);
 }
 
 void update_shapes(const Velocities& velocities, Shapes* const shapes)
@@ -270,63 +276,29 @@ bool Connection::Init(const Mode mode)
 	return ExchangeNicks();
 }
 
-
 bool Connection::ExchangeNicks()
 {
-	const auto send_nick = [] {
-		const auto str_size = static_cast<uint8_t>(local_nick.size());
-		if (!Send(&str_size, sizeof(str_size))) {
-			std::cerr << "failed to send local nick size\n";
-			return false;
-		}
-		if (!Send(local_nick.data(), sizeof(*local_nick.data()) * str_size)) {
-			std::cerr << "failed to send local nick\n";
-			return false;
-		}
-		return true;
-	};
-	const auto receive_nick = [] {
-		uint8_t str_size;
-		if (!Receive(&str_size, sizeof(str_size))) {
-			std::cerr << "failed to receive remote nick size\n";
-			return false;
-		}
-		std::vector<std::string::value_type> buffer(str_size + 1);
-		if (!Receive(buffer.data(), sizeof(*buffer.data()) * str_size)) {
-			std::cerr << "failed to receive remote nick\n";
-			return false;
-		}
-		remote_nick = buffer.data();
-		return true;
-	};
-	
-	if (local_nick.length() > 255) {
+	if (local_nick.size() > 255) {
 		local_nick.resize(255);
 		local_nick[254] = '\0';
 	}
-
-	if (is_server) {
-		if (!send_nick() || !receive_nick())
-			return false;
-	} else {
-		if (!receive_nick() || !send_nick())
-			return false;
+	
+	const auto send_size = static_cast<uint8_t>(local_nick.size());
+	uint8_t receive_size;
+	if(!Exchange(send_size, &receive_size)) {
+		std::cerr << "failed to exchange nicks sizes!\n";
+		return false;
 	}
-
+	std::vector<std::string::value_type> buffer(receive_size + 1);
+	if (!Exchange(local_nick.data(), send_size, buffer.data(), receive_size)) {
+		std::cerr << "failed to exchange nicks!\n";
+		return false;
+	}
+	remote_nick = buffer.data();
 	std::cout << "connected to: " << remote_nick << '\n';
 	return true;
 }
 
-void Connection::ExchangeVelocities(const float local, float* const remote)
-{
-	if (is_server) {
-		Send(&local, sizeof(local));
-		Receive(remote, sizeof(*remote));
-	} else {
-		Receive(remote, sizeof(*remote));
-		Send(&local, sizeof(local));
-	}
-}
 
 bool Connection::Send(const void* const data, const std::size_t size)
 {
@@ -340,4 +312,27 @@ bool Connection::Receive(void* const buffer, const std::size_t size)
 	return status == sf::Socket::Done;
 }
 
+template<class Data>
+bool Connection::Exchange(const Data sending, Data* const receiving) 
+{
+	return ExchangeFun([=]{return Send(&sending, sizeof(Data));},
+                        [=]{return Receive(receiving, sizeof(Data));});
+}
+
+template<class SendData, class ReceiveData>
+bool Connection::Exchange(const SendData* const sending, const std::size_t send_size, 
+                          ReceiveData* const receiving, const std::size_t receive_size)
+{
+	return ExchangeFun([=]{return Send(sending, sizeof(SendData) * send_size);},
+			[=]{return Receive(receiving, sizeof(ReceiveData) * receive_size);});
+}
+
+template<class SendFunc, class ReceiveFunc>
+bool Connection::ExchangeFun(const SendFunc send, const ReceiveFunc receive)
+{
+	if (is_server)
+		return send() && receive();
+	else
+		return receive() && send();
+}
 

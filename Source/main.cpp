@@ -68,7 +68,6 @@ namespace Connection {
 	static bool is_server;
 
 	static bool Init(Mode mode);
-	static bool ExchangeNicks();	
 	static bool Exchange(sf::Packet* send, sf::Packet* receive);
 	template<class Data>
 	bool Exchange(Data sending, Data* receiving);
@@ -279,11 +278,7 @@ bool Connection::Init(const Mode mode)
 			return false;
 		}
 	}
-	return ExchangeNicks();
-}
 
-bool Connection::ExchangeNicks()
-{
 	sf::Packet send_pack, receive_pack;
 	send_pack << local_nick;
 	
@@ -294,6 +289,7 @@ bool Connection::ExchangeNicks()
 
 	receive_pack >> remote_nick;
 	std::cout << "connected to: " << remote_nick << '\n';
+
 	return true;
 }
 

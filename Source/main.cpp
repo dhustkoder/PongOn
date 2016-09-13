@@ -71,6 +71,9 @@ namespace Connection {
 	static bool ExchangeNicks();
 	static bool Send(const void* data, std::size_t size);
 	static bool Receive(void* buffer, std::size_t size);
+	static bool Send(sf::Packet& pack);
+	static bool Receive(sf::Packet& pack);
+	static bool Exchange(sf::Packet& send, sf::Packet& receive);
 	template<class Data>
 	static bool Exchange(Data sending, Data* receiving);
 	template<class SendData, class ReceiveData>
@@ -249,6 +252,9 @@ bool Connection::Init(const Mode mode)
 		std::cout << "enter your nickname: ";
 		std::getline(std::cin, local_nick);
 	} while (local_nick.size() == 0);
+	
+	if (local_nick.size() > 10)
+		local_nick.resize(10);
 
 	if (is_server) {
 		sf::TcpListener listener;
@@ -278,23 +284,14 @@ bool Connection::Init(const Mode mode)
 
 bool Connection::ExchangeNicks()
 {
-	if (local_nick.size() > 255) {
-		local_nick.resize(255);
-		local_nick[254] = '\0';
-	}
-	
-	const auto send_size = static_cast<uint8_t>(local_nick.size());
-	uint8_t receive_size;
-	if(!Exchange(send_size, &receive_size)) {
-		std::cerr << "failed to exchange nicks sizes!\n";
+	sf::Packet local_nick_pack, remote_nick_pack;
+	local_nick_pack << local_nick;
+	if (!Exchange(local_nick_pack, remote_nick_pack)) {
+		std::cerr << "failed to exchange nicks\n";
 		return false;
 	}
-	std::vector<std::string::value_type> buffer(receive_size + 1);
-	if (!Exchange(local_nick.data(), send_size, buffer.data(), receive_size)) {
-		std::cerr << "failed to exchange nicks!\n";
-		return false;
-	}
-	remote_nick = buffer.data();
+
+	remote_nick_pack >> remote_nick;
 	std::cout << "connected to: " << remote_nick << '\n';
 	return true;
 }
@@ -310,6 +307,24 @@ bool Connection::Receive(void* const buffer, const std::size_t size)
 {
 	status = socket.receive(buffer, size, bytes_received);
 	return status == sf::Socket::Done;
+}
+
+bool Connection::Send(sf::Packet& pack)
+{
+	status = socket.send(pack);
+	return status == sf::Socket::Done;
+}
+
+bool Connection::Receive(sf::Packet& pack)
+{
+	status = socket.receive(pack);
+	return status == sf::Socket::Done;
+}
+
+static bool Connection::Exchange(sf::Packet& send, sf::Packet& receive)
+{
+	return ExchangeFun([&]{return Send(send);},
+			[&]{return Receive(receive);});
 }
 
 template<class Data>

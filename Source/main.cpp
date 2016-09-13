@@ -71,9 +71,6 @@ namespace Connection {
 	static bool Exchange(sf::Packet* send, sf::Packet* receive);
 	template<class Data>
 	bool Exchange(Data sending, Data* receiving);
-	template<class SendData, class ReceiveData>
-	bool Exchange(const SendData* sending, std::size_t send_size, 
-	              ReceiveData* receiving, std::size_t receive_size);
 	template<class SendFunc, class ReceiveFunc>
 	bool ExchangeFun(SendFunc send, ReceiveFunc receive);
 	template<class ...Args>
@@ -143,7 +140,7 @@ int main(int argc, char** argv)
 		update_velocities(positions, &velocities);
 		
 		if (!Connection::Exchange(velocities.local, &velocities.remote)) {
-			std::cerr << "Connection error: " << Connection::status;
+			std::cerr << "Connection error: " << Connection::status << '\n';
 			break;
 		}
 		
@@ -181,9 +178,7 @@ void update_positions(const Shapes& shapes, Positions* const positions)
 
 
 void update_velocities(const Positions& positions, Velocities* const velocities)
-{
-	using std::abs;
-	
+{	
 	const auto& ballpos = positions.ball;
 	auto& ballvel = velocities->ball;
 	
@@ -196,14 +191,14 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		ballvel.x = -ballvel.x;
 	} else {
 		if (ballpos.left < 0)
-			ballvel.x = abs(ballvel.x);
+			ballvel.x = std::abs(ballvel.x);
 		else if (ballpos.right > WinWidth)
-			ballvel.x = -abs(ballvel.x);
+			ballvel.x = -std::abs(ballvel.x);
 
 		if (ballpos.top < 0)
-			ballvel.y = abs(ballvel.y);
+			ballvel.y = std::abs(ballvel.y);
 		else if (ballpos.bottom > WinHeight)
-			ballvel.y = -abs(ballvel.y);
+			ballvel.y = -std::abs(ballvel.y);
 	}
 		
 	if (velocities->local) {
@@ -322,14 +317,6 @@ bool Connection::Exchange(const Data sending, Data* const receiving)
 {
 	return ExchangeFun([=]{return Send(&sending, sizeof(Data));},
                         [=]{return Receive(receiving, sizeof(Data), bytes_received);});
-}
-
-template<class SendData, class ReceiveData>
-bool Connection::Exchange(const SendData* const sending, const std::size_t send_size, 
-                          ReceiveData* const receiving, const std::size_t receive_size)
-{
-	return ExchangeFun([=]{return Send(sending, sizeof(SendData) * send_size);},
-			[=]{return Receive(receiving, sizeof(ReceiveData) * receive_size, bytes_received);});
 }
 
 template<class SendFunc, class ReceiveFunc>

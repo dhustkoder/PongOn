@@ -68,19 +68,19 @@ namespace Connection {
 	static bool is_server;
 
 	static bool Init(Mode mode);
-	static bool ExchangeNicks();
-	static bool Send(const void* data, std::size_t size);
-	static bool Receive(void* buffer, std::size_t size);
-	static bool Send(sf::Packet& pack);
-	static bool Receive(sf::Packet& pack);
-	static bool Exchange(sf::Packet& send, sf::Packet& receive);
+	static bool ExchangeNicks();	
+	static bool Exchange(sf::Packet* send, sf::Packet* receive);
 	template<class Data>
-	static bool Exchange(Data sending, Data* receiving);
+	bool Exchange(Data sending, Data* receiving);
 	template<class SendData, class ReceiveData>
 	bool Exchange(const SendData* sending, std::size_t send_size, 
 	              ReceiveData* receiving, std::size_t receive_size);
 	template<class SendFunc, class ReceiveFunc>
-	static bool ExchangeFun(SendFunc send, ReceiveFunc receive);
+	bool ExchangeFun(SendFunc send, ReceiveFunc receive);
+	template<class ...Args>
+	bool Send(Args&& ...args);
+	template<class ...Args>
+	bool Receive(Args&& ...args);
 }
 
 static void update_positions(const Shapes& shapes, Positions* positions);
@@ -284,54 +284,44 @@ bool Connection::Init(const Mode mode)
 
 bool Connection::ExchangeNicks()
 {
-	sf::Packet local_nick_pack, remote_nick_pack;
-	local_nick_pack << local_nick;
-	if (!Exchange(local_nick_pack, remote_nick_pack)) {
+	sf::Packet send_pack, receive_pack;
+	send_pack << local_nick;
+	
+	if (!Exchange(&send_pack, &receive_pack)) {
 		std::cerr << "failed to exchange nicks\n";
 		return false;
 	}
 
-	remote_nick_pack >> remote_nick;
+	receive_pack >> remote_nick;
 	std::cout << "connected to: " << remote_nick << '\n';
 	return true;
 }
 
-
-bool Connection::Send(const void* const data, const std::size_t size)
+template<class ...Args>
+bool Connection::Send(Args&& ...args)
 {
-	status = socket.send(data, size);
+	status = socket.send(std::forward<Args>(args)...);
 	return status == sf::Socket::Done;
 }
 
-bool Connection::Receive(void* const buffer, const std::size_t size)
+template<class ...Args>
+bool Connection::Receive(Args&& ...args)
 {
-	status = socket.receive(buffer, size, bytes_received);
+	status = socket.receive(std::forward<Args>(args)...);
 	return status == sf::Socket::Done;
 }
 
-bool Connection::Send(sf::Packet& pack)
+bool Connection::Exchange(sf::Packet* const send, sf::Packet* const receive)
 {
-	status = socket.send(pack);
-	return status == sf::Socket::Done;
-}
-
-bool Connection::Receive(sf::Packet& pack)
-{
-	status = socket.receive(pack);
-	return status == sf::Socket::Done;
-}
-
-static bool Connection::Exchange(sf::Packet& send, sf::Packet& receive)
-{
-	return ExchangeFun([&]{return Send(send);},
-			[&]{return Receive(receive);});
+	return ExchangeFun([=]{return Send(*send);},
+			[=]{return Receive(*receive);});
 }
 
 template<class Data>
 bool Connection::Exchange(const Data sending, Data* const receiving) 
 {
 	return ExchangeFun([=]{return Send(&sending, sizeof(Data));},
-                        [=]{return Receive(receiving, sizeof(Data));});
+                        [=]{return Receive(receiving, sizeof(Data), bytes_received);});
 }
 
 template<class SendData, class ReceiveData>
@@ -339,7 +329,7 @@ bool Connection::Exchange(const SendData* const sending, const std::size_t send_
                           ReceiveData* const receiving, const std::size_t receive_size)
 {
 	return ExchangeFun([=]{return Send(sending, sizeof(SendData) * send_size);},
-			[=]{return Receive(receiving, sizeof(ReceiveData) * receive_size);});
+			[=]{return Receive(receiving, sizeof(ReceiveData) * receive_size, bytes_received);});
 }
 
 template<class SendFunc, class ReceiveFunc>

@@ -141,6 +141,12 @@ int main(int argc, char** argv)
 		
 		update_positions(shapes, &positions);
 		update_velocities(positions, &velocities);
+		
+		if (!Connection::Exchange(velocities.local, &velocities.remote)) {
+			std::cerr << "Connection error: " << Connection::status;
+			break;
+		}
+		
 		update_shapes(velocities, &shapes);
 		
 		window.clear(sf::Color::Blue);
@@ -208,8 +214,6 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		else if (vel > 0 && pos.bottom >= WinHeight)
 			vel = 0;
 	}
-
-	Connection::Exchange(velocities->local, &velocities->remote);
 }
 
 void update_shapes(const Velocities& velocities, Shapes* const shapes)

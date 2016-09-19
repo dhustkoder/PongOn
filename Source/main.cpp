@@ -89,10 +89,10 @@ int main(int argc, char** argv)
 {
 	if (argc > 1) {
 		if (std::strcmp(argv[1], "-server") == 0) {
-			if(!Connection::Init(Connection::Mode::Server))
+			if (!Connection::Init(Connection::Mode::Server))
 				return EXIT_FAILURE;
 		} else if (std::strcmp(argv[1], "-client") == 0) {
-			if(!Connection::Init(Connection::Mode::Client))
+			if (!Connection::Init(Connection::Mode::Client))
 				return EXIT_FAILURE;
 		} else {
 			std::cerr << "unknown argument: " << argv[1] << '\n';
@@ -111,11 +111,11 @@ int main(int argc, char** argv)
 	sf::Event event;
 
 	if (Connection::is_server) {
-		shapes.local.setPosition({Paddle::Width/2, WinHeight/2});
-		shapes.remote.setPosition({WinWidth - Paddle::Width/2, WinHeight/2});
+		shapes.local.setPosition(Paddle::Width/2, WinHeight/2);
+		shapes.remote.setPosition(WinWidth - Paddle::Width/2, WinHeight/2);
 	} else {
-		shapes.local.setPosition({WinWidth - Paddle::Width/2, WinHeight/2});
-		shapes.remote.setPosition({Paddle::Width/2, WinHeight/2});
+		shapes.local.setPosition(WinWidth - Paddle::Width/2, WinHeight/2);
+		shapes.remote.setPosition(Paddle::Width/2, WinHeight/2);
 	}
 
 	window.setFramerateLimit(60);

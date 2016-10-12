@@ -306,17 +306,17 @@ bool Connection::Receive(Args&& ...args)
 	return status == sf::Socket::Done;
 }
 
-bool Connection::Exchange(sf::Packet* const send, sf::Packet* const receive)
-{
-	return ExchangeFun([=]{return Send(*send);},
-			[=]{return Receive(*receive);});
-}
-
 template<class Data>
 bool Connection::Exchange(const Data sending, Data* const receiving) 
 {
 	return ExchangeFun([=]{return Send(&sending, sizeof(Data));},
                         [=]{return Receive(receiving, sizeof(Data), bytes_received);});
+}
+
+bool Connection::Exchange(sf::Packet* const send, sf::Packet* const receive)
+{
+	return ExchangeFun([=]{return Send(*send);},
+			[=]{return Receive(*receive);});
 }
 
 template<class SendFunc, class ReceiveFunc>

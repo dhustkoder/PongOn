@@ -418,8 +418,9 @@ void Connection::print_chat()
 		aux_str += chat_msgs[line] + "\n";
 	for (; line < 20; ++line)
 		aux_str += "\n";
-
-	std::cout << std::move(aux_str) <<
-	  "=================================================\n";
+	
+	std::cout << "======================== CHAT ========================\n"
+	          << std::move(aux_str)
+	          << "======================== CHAT ========================\n";
 }
 

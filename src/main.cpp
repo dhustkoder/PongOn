@@ -379,8 +379,8 @@ void Connection::UpdateChat()
 		if (sending_msg.size() > 50)
 			sending_msg = sending_msg.substr(0, 50);
 		const auto fmt_msg = local_nick + ":> " + sending_msg;
-		chat_msgs.push_back(fmt_msg);
 		send_pack << fmt_msg;
+		chat_msgs.push_back(std::move(fmt_msg));
 		sending_msg = "";
 	}
 
@@ -388,7 +388,7 @@ void Connection::UpdateChat()
 	receive_pack >> receiving_msg;
 
 	if (receiving_msg != "") {
-		chat_msgs.push_back(receiving_msg);
+		chat_msgs.push_back(std::move(receiving_msg));
 		receiving_msg = "";
 	}
 
@@ -406,15 +406,15 @@ void Connection::print_chat()
 #endif
 
 	std::string aux_str;
-	auto chat_msgs_size = static_cast<int>(chat_msgs.size());
-	if (chat_msgs_size == 100) {
+	auto chat_msgs_size = chat_msgs.size();
+	if (chat_msgs_size >= 100) {
 		std::move(chat_msgs.begin() + 80, chat_msgs.end(),
 		  chat_msgs.begin());
 		chat_msgs.erase(chat_msgs.begin() + 20, chat_msgs.end());
 		chat_msgs_size = 20;
 	}
 
-	int line = std::max(0, chat_msgs_size - 20);
+	auto line = chat_msgs_size < 20 ? 0 : chat_msgs_size - 20;
 	for (; line < chat_msgs_size; ++line)
 		aux_str += chat_msgs[line] + "\n";
 	for (; line < 20; ++line)

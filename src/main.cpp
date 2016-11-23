@@ -8,7 +8,6 @@
 #include <vector>
 #include <thread>
 #include <chrono>
-#include <atomic>
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
@@ -71,7 +70,7 @@ namespace Connection {
 	static std::vector<std::string> chat_msgs;
 	static std::size_t bytes_received;
 	static sf::Socket::Status status;
-	static std::atomic<bool> is_running;
+	static bool is_running;
 	static bool is_server;
 	static void print_chat();
 

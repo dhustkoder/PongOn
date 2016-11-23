@@ -6,6 +6,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <thread>
+#include <chrono>
+#include <atomic>
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
@@ -63,11 +66,18 @@ namespace Connection {
 	static sf::TcpSocket socket;
 	static std::string local_nick;
 	static std::string remote_nick;
+	static std::string sending_msg;
+	static std::string receiving_msg;
+	static std::vector<std::string> chat_msgs;
 	static std::size_t bytes_received;
 	static sf::Socket::Status status;
+	static std::atomic<bool> is_running;
 	static bool is_server;
+	static void print_chat();
 
 	static bool Init(Mode mode);
+	static void Close();
+	static void UpdateChat();
 	static bool Exchange(sf::Packet* send, sf::Packet* receive);
 	template<class Data>
 	bool Exchange(Data sending, Data* receiving);
@@ -136,6 +146,8 @@ int main(int argc, char** argv)
 			}
 		}
 		
+		Connection::UpdateChat();
+
 		update_positions(shapes, &positions);
 		update_velocities(positions, &velocities);
 		
@@ -153,6 +165,7 @@ int main(int argc, char** argv)
 		window.display();
 	}
 
+	Connection::Close();
 	return EXIT_SUCCESS;
 }
 
@@ -245,6 +258,7 @@ void process_input(const sf::Keyboard::Key code, const bool pressed, Velocities*
 
 bool Connection::Init(const Mode mode)
 {
+	is_running = false;
 	is_server = mode == Mode::Server;
 	do {
 		std::cout << "enter your nickname: ";
@@ -288,8 +302,35 @@ bool Connection::Init(const Mode mode)
 
 	receive_pack >> remote_nick;
 	std::cout << "connected to: " << remote_nick << '\n';
+	chat_msgs.reserve(100);
+	print_chat();
+	is_running = true;
+
+	std::thread stdin_updater([] {
+		std::string aux_str;
+		while (is_running) {
+			if (sending_msg == "") {
+				std::getline(std::cin, aux_str);
+				if (aux_str != "" && aux_str != " " &&
+				  aux_str != "\n" && aux_str != "\t" &&
+				  aux_str != "\0") {
+					sending_msg = std::move(aux_str);
+				}
+			}
+		}
+		std::exit(0);
+	});
+
+	stdin_updater.detach();
 
 	return true;
+}
+
+void Connection::Close()
+{
+	// wait for threads to finish
+	is_running = false;
+	std::this_thread::sleep_for(std::chrono::milliseconds(400));
 }
 
 template<class ...Args>
@@ -326,5 +367,60 @@ bool Connection::ExchangeFun(const SendFunc send, const ReceiveFunc receive)
 		return send() && receive();
 	else
 		return receive() && send();
+}
+
+
+void Connection::UpdateChat()
+{
+	const auto old_chat_msgs_size = chat_msgs.size();
+	sf::Packet receive_pack, send_pack;
+	
+	if (sending_msg != "") {
+		if (sending_msg.size() > 50)
+			sending_msg = sending_msg.substr(0, 50);
+		const auto fmt_msg = local_nick + ":> " + sending_msg;
+		chat_msgs.push_back(fmt_msg);
+		send_pack << fmt_msg;
+		sending_msg = "";
+	}
+
+	Exchange(&send_pack, &receive_pack);
+	receive_pack >> receiving_msg;
+
+	if (receiving_msg != "") {
+		chat_msgs.push_back(receiving_msg);
+		receiving_msg = "";
+	}
+
+	if (old_chat_msgs_size != chat_msgs.size())
+		print_chat();
+}
+
+
+void Connection::print_chat()
+{
+#ifdef __linux__
+	std::system("clear");
+#elif defined(_WIN32)
+	std::system("cls");
+#endif
+
+	std::string aux_str;
+	auto chat_msgs_size = static_cast<int>(chat_msgs.size());
+	if (chat_msgs_size == 100) {
+		std::move(chat_msgs.begin() + 80, chat_msgs.end(),
+		  chat_msgs.begin());
+		chat_msgs.erase(chat_msgs.begin() + 20, chat_msgs.end());
+		chat_msgs_size = 20;
+	}
+
+	int line = std::max(0, chat_msgs_size - 20);
+	for (; line < chat_msgs_size; ++line)
+		aux_str += chat_msgs[line] + "\n";
+	for (; line < 20; ++line)
+		aux_str += "\n";
+
+	std::cout << std::move(aux_str) <<
+	  "=================================================\n";
 }
 

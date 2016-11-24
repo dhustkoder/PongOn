@@ -97,16 +97,17 @@ static void process_input(sf::Keyboard::Key code, bool pressed, Velocities* velo
 int main(int argc, char** argv)
 {
 	if (argc > 1) {
+		Connection::Mode mode;
 		if (std::strcmp(argv[1], "-server") == 0) {
-			if (!Connection::Init(Connection::Mode::Server))
-				return EXIT_FAILURE;
+			mode = Connection::Mode::Server;
 		} else if (std::strcmp(argv[1], "-client") == 0) {
-			if (!Connection::Init(Connection::Mode::Client))
-				return EXIT_FAILURE;
+			mode = Connection::Mode::Client;
 		} else {
 			std::cerr << "unknown argument: " << argv[1] << '\n';
 			return EXIT_FAILURE;
 		}
+		if (!Connection::Init(mode))
+			return EXIT_FAILURE;
 	} else {
 		std::cerr << "usage: " << argv[0] << " <mode>\n"
 		          << "mode: -server, -client\n";

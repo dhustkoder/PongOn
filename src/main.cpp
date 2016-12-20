@@ -12,30 +12,32 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
 
-constexpr const unsigned int WinWidth {512};
-constexpr const unsigned int WinHeight {256};
+constexpr const unsigned int kWinWidth {512};
+constexpr const unsigned int kWinHeight {256};
 
 struct Position {
 	float top, bottom, left, right;
 };
 
+constexpr const float kBallRadius {10.5f};
+constexpr const float kBallVelocity {2.5f};
+
 struct Ball : sf::CircleShape {
-	static constexpr const float Radius {10.5f};
-	static constexpr const float Velocity {2.5f};
-	Ball() : sf::CircleShape(Radius) {
-		setPosition(WinWidth / 2, WinHeight / 2);
-		setOrigin(Radius, Radius);
+	Ball() : sf::CircleShape(kBallRadius) {
+		setPosition(kWinWidth / 2, kWinHeight / 2);
+		setOrigin(kBallRadius, kBallRadius);
 		setFillColor(sf::Color::Green);
 		setOutlineColor(sf::Color::Magenta);
 	}
 };
 
+constexpr const float kPaddleWidth {15.f};
+constexpr const float kPaddleHeight {60.f};
+constexpr const float kPaddleVelocity {8.8f};
+
 struct Paddle : sf::RectangleShape {
-	static constexpr const float Width {15.f};
-	static constexpr const float Height {60.f};
-	static constexpr const float Velocity {8.8f};
-	Paddle() : sf::RectangleShape({Width, Height}) {
-		setOrigin(Width / 2, Height / 2);
+	Paddle() : sf::RectangleShape({kPaddleWidth, kPaddleHeight}) {
+		setOrigin(kPaddleWidth / 2, kPaddleHeight / 2);
 		setFillColor(sf::Color::Red);
 		setOutlineColor(sf::Color::Green);
 	}
@@ -48,7 +50,7 @@ struct Shapes {
 };
 
 struct Velocities {
-	sf::Vector2f ball {Ball::Velocity, Ball::Velocity / 4};
+	sf::Vector2f ball {kBallVelocity, kBallVelocity / 4};
 	float local {0.f};
 	float remote {0.f};
 };
@@ -61,7 +63,7 @@ struct Positions {
 
 namespace Connection {
 	enum class Mode {Server, Client};
-	static constexpr const unsigned short Port {7171};
+	constexpr const unsigned short kPort {7171};
 	static sf::TcpSocket socket;
 	static std::string local_nick;
 	static std::string remote_nick;
@@ -92,7 +94,7 @@ static void update_positions(const Shapes& shapes, Positions* positions);
 static void update_velocities(const Positions& positions, Velocities* velocities);
 static void update_shapes(const Velocities& velocities, Shapes* shapes);
 static void process_input(sf::Keyboard::Key code, bool pressed, Velocities* velocities);
-
+static void set_initial_positions(Paddle* local, Paddle* remote);
 
 int main(int argc, char** argv)
 {
@@ -117,16 +119,10 @@ int main(int argc, char** argv)
 	Shapes shapes;
 	Positions positions;
 	Velocities velocities;
-	sf::RenderWindow window({WinWidth, WinHeight}, "PongOn");
+	sf::RenderWindow window({kWinWidth, kWinHeight}, "PongOn");
 	sf::Event event;
 
-	if (Connection::is_server) {
-		shapes.local.setPosition(Paddle::Width/2, WinHeight/2);
-		shapes.remote.setPosition(WinWidth - Paddle::Width/2, WinHeight/2);
-	} else {
-		shapes.local.setPosition(WinWidth - Paddle::Width/2, WinHeight/2);
-		shapes.remote.setPosition(Paddle::Width/2, WinHeight/2);
-	}
+	set_initial_positions(&shapes.local, &shapes.remote);
 
 	window.setFramerateLimit(60);
 	while (window.isOpen()) {
@@ -170,7 +166,20 @@ int main(int argc, char** argv)
 }
 
 
+void set_initial_positions(Paddle* const local, Paddle* const remote)
+{
+	constexpr const auto middleScreen = kWinHeight / 2;
+	constexpr const auto left = kPaddleWidth / 2;
+	constexpr const auto right = kWinWidth - (kPaddleWidth) / 2;
 
+	if (Connection::is_server) {
+		local->setPosition(left, middleScreen);
+		remote->setPosition(right, middleScreen);
+	} else {
+		local->setPosition(right, middleScreen);
+		remote->setPosition(left, middleScreen);
+	}
+}
 
 void update_positions(const Shapes& shapes, Positions* const positions)
 {
@@ -184,9 +193,9 @@ void update_positions(const Shapes& shapes, Positions* const positions)
 		pos.bottom = shapePos.y + height_diff;
 		pos.top = shapePos.y - height_diff;
 	};
-	update(shapes.ball, positions->ball, Ball::Radius, Ball::Radius);
-	update(shapes.local, positions->local, Paddle::Width, Paddle::Height);
-	update(shapes.remote, positions->remote, Paddle::Width, Paddle::Height);
+	update(shapes.ball, positions->ball, kBallRadius, kBallRadius);
+	update(shapes.local, positions->local, kPaddleWidth, kPaddleHeight);
+	update(shapes.remote, positions->remote, kPaddleWidth, kPaddleHeight);
 }
 
 
@@ -205,12 +214,12 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 	} else {
 		if (ballpos.left < 0)
 			ballvel.x = std::abs(ballvel.x);
-		else if (ballpos.right > WinWidth)
+		else if (ballpos.right > kWinWidth)
 			ballvel.x = -std::abs(ballvel.x);
 
 		if (ballpos.top < 0)
 			ballvel.y = std::abs(ballvel.y);
-		else if (ballpos.bottom > WinHeight)
+		else if (ballpos.bottom > kWinHeight)
 			ballvel.y = -std::abs(ballvel.y);
 	}
 		
@@ -219,7 +228,7 @@ void update_velocities(const Positions& positions, Velocities* const velocities)
 		auto& vel = velocities->local;
 		if (vel < 0 && pos.top <= 0)
 			vel = 0;
-		else if (vel > 0 && pos.bottom >= WinHeight)
+		else if (vel > 0 && pos.bottom >= kWinHeight)
 			vel = 0;
 	}
 }
@@ -246,8 +255,8 @@ void process_input(const sf::Keyboard::Key code, const bool pressed, Velocities*
 	float& vel = velocities->local;
 	if (pressed) {
 		switch (code) {
-		case sf::Keyboard::W: vel = -Paddle::Velocity; break;
-		case sf::Keyboard::S: vel = Paddle::Velocity; break;
+		case sf::Keyboard::W: vel = -kPaddleVelocity; break;
+		case sf::Keyboard::S: vel = kPaddleVelocity; break;
 		default: vel = 0; break;
 		}
 	} else {
@@ -271,8 +280,8 @@ bool Connection::Init(const Mode mode)
 	if (is_server) {
 		sf::TcpListener listener;
 		std::cout << "booting as server...\n";
-		if (listener.listen(Port) != sf::Socket::Done) {
-			std::cerr << "failed to listen port " << Port << '\n';
+		if (listener.listen(kPort) != sf::Socket::Done) {
+			std::cerr << "failed to listen port " << kPort << '\n';
 			return false;
 		}
 		
@@ -286,7 +295,7 @@ bool Connection::Init(const Mode mode)
 		std::cout << "booting as client...\n";
 		std::cout << "enter the server\'s ip address: ";
 		std::cin >> serverIp;
-		if (socket.connect(serverIp, Port) != sf::Socket::Done) {
+		if (socket.connect(serverIp, kPort) != sf::Socket::Done) {
 			std::cerr << "connection failed!\n";
 			return false;
 		}

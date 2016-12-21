@@ -74,11 +74,11 @@ namespace Connection {
 	static sf::Socket::Status status;
 	static bool is_running;
 	static bool is_server;
-	static void print_chat();
 
 	static bool Init(Mode mode);
 	static void Close();
 	static void UpdateChat();
+	static void PrintChat();
 	static bool Exchange(sf::Packet* send, sf::Packet* receive);
 	template<class Data>
 	bool Exchange(Data sending, Data* receiving);
@@ -312,9 +312,9 @@ bool Connection::Init(const Mode mode)
 	receive_pack >> remote_nick;
 	std::cout << "connected to: " << remote_nick << '\n';
 	chat_msgs.reserve(100);
-	print_chat();
-	is_running = true;
+	PrintChat();
 
+	is_running = true;
 	std::thread stdin_updater([] {
 		std::string aux_str;
 		while (is_running) {
@@ -331,7 +331,6 @@ bool Connection::Init(const Mode mode)
 	});
 
 	stdin_updater.detach();
-
 	return true;
 }
 
@@ -402,11 +401,11 @@ void Connection::UpdateChat()
 	}
 
 	if (old_chat_msgs_size != chat_msgs.size())
-		print_chat();
+		PrintChat();
 }
 
 
-void Connection::print_chat()
+void Connection::PrintChat()
 {
 #ifdef __linux__
 	std::system("clear");

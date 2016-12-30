@@ -69,6 +69,7 @@ namespace Connection {
 	static std::string remote_nick;
 	static std::string sending_msg;
 	static std::string receiving_msg;
+	static std::thread stdin_updater;
 	static std::vector<std::string> chat_msgs;
 	static std::size_t bytes_received;
 	static sf::Socket::Status status;
@@ -315,7 +316,7 @@ bool Connection::Init(const Mode mode)
 	PrintChat();
 
 	is_running = true;
-	std::thread stdin_updater([] {
+	stdin_updater = std::thread([] {
 		std::string aux_str;
 		while (is_running) {
 			if (sending_msg == "") {
@@ -327,7 +328,6 @@ bool Connection::Init(const Mode mode)
 				}
 			}
 		}
-		std::exit(0);
 	});
 
 	stdin_updater.detach();
@@ -337,8 +337,10 @@ bool Connection::Init(const Mode mode)
 void Connection::Close()
 {
 	// wait for threads to finish
+	socket.disconnect();
 	is_running = false;
-	std::this_thread::sleep_for(std::chrono::milliseconds(400));
+	if (stdin_updater.joinable())
+		stdin_updater.join();
 }
 
 template<class ...Args>

@@ -169,9 +169,9 @@ int main(int argc, char** argv)
 
 void set_initial_positions(Paddle* const local, Paddle* const remote)
 {
-	constexpr const auto middleScreen = kWinHeight / 2;
-	constexpr const auto left = kPaddleWidth / 2;
-	constexpr const auto right = kWinWidth - (kPaddleWidth) / 2;
+	constexpr const auto middleScreen = kWinHeight / 2.f;
+	constexpr const auto left = kPaddleWidth / 2.f;
+	constexpr const auto right = kWinWidth - (kPaddleWidth) / 2.f;
 
 	if (Connection::is_server) {
 		local->setPosition(left, middleScreen);

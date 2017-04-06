@@ -15,10 +15,6 @@
 constexpr const unsigned int kWinWidth {512};
 constexpr const unsigned int kWinHeight {256};
 
-struct Position {
-	float top, bottom, left, right;
-};
-
 constexpr const float kBallRadius {10.5f};
 constexpr const float kBallVelocity {2.5f};
 
@@ -53,6 +49,10 @@ struct Velocities {
 	sf::Vector2f ball {kBallVelocity, kBallVelocity / 4};
 	float local {0.f};
 	float remote {0.f};
+};
+
+struct Position {
+	float top, bottom, left, right;
 };
 
 struct Positions {
